@@ -1,0 +1,65 @@
+# ============================================================
+# KasirPRO — Keep Supabase Active
+# File ini mencegah project Supabase free tier di-pause
+# karena tidak ada aktivitas selama 7 hari.
+#
+# Letakkan file ini di repo GitHub kamu di:
+# .github/workflows/keep-supabase-alive.yml
+# ============================================================
+
+name: Keep Supabase Active
+
+on:
+  # Jadwal otomatis: setiap 3 hari sekali jam 07:00 WIB (00:00 UTC)
+  schedule:
+    - cron: '0 0 */3 * *'
+
+  # Bisa juga dijalankan manual dari tab Actions di GitHub
+  workflow_dispatch:
+
+jobs:
+  ping:
+    name: Ping Supabase Database
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: 📡 Ping Supabase REST API
+        id: ping
+        run: |
+          echo "🕐 Waktu ping: $(TZ='Asia/Jakarta' date '+%Y-%m-%d %H:%M:%S WIB')"
+          echo "🔗 Target: ${{ vars.SUPABASE_URL }}"
+
+          HTTP_CODE=$(curl -s -o /tmp/response.json -w "%{http_code}" \
+            --max-time 30 \
+            --retry 3 \
+            --retry-delay 5 \
+            -H "apikey: ${{ vars.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ vars.SUPABASE_ANON_KEY }}" \
+            -H "Content-Type: application/json" \
+            "${{ vars.SUPABASE_URL }}/rest/v1/")
+
+          echo "📬 HTTP Status: $HTTP_CODE"
+          echo "http_code=$HTTP_CODE" >> $GITHUB_OUTPUT
+
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "✅ Supabase AKTIF dan merespons dengan baik!"
+          elif [ "$HTTP_CODE" = "401" ]; then
+            echo "⚠️  HTTP 401 — API key mungkin salah, tapi server HIDUP"
+          else
+            echo "❌ Respons tidak terduga: $HTTP_CODE"
+            cat /tmp/response.json || true
+            exit 1
+          fi
+
+      - name: 📊 Laporan Hasil
+        if: always()
+        run: |
+          echo "=================================="
+          echo "  LAPORAN PING SUPABASE"
+          echo "=================================="
+          echo "  Status    : ${{ steps.ping.outputs.http_code }}"
+          echo "  Waktu     : $(TZ='Asia/Jakarta' date '+%d %B %Y %H:%M WIB')"
+          echo "  Jadwal    : Setiap 3 hari sekali"
+          echo "  Tujuan    : Mencegah Supabase pause"
+          echo "=================================="
